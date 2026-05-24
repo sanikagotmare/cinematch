@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CineMatch — local development stack
+#
+# Usage:
+#   docker compose up --build          # first run (builds image + ingests data)
+#   docker compose up                  # subsequent runs (data already ingested)
+#   docker compose down -v             # tear down + remove volumes
+#
+# The `ingest` service runs once, writes embeddings to the shared
+# `chroma_data` volume, then exits (restart: "no").
+# The `api` service waits for ingest to finish via depends_on + condition.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── One-time ingestion job ─────────────────────────────────────────────────
+  ingest:
+    build: .
+    image: cinematch:latest
+    container_name: cinematch_ingest
+    command: python scripts/ingest.py
+    restart: "no"
+    env_file: .env
+    environment:
+      - CHROMA_PERSIST_DIR=/app/.chromadb
+      - MOVIES_CSV=/app/data/tmdb_5000_movies.csv
+      - CREDITS_CSV=/app/data/tmdb_5000_credits.csv
+    volumes:
+      - chroma_data:/app/.chromadb          # shared with api service
+      - ./data:/app/data:ro                 # mount your Kaggle CSVs here (read-only)
+      - ./logs:/app/logs
+    healthcheck:
+      disable: true                         # one-shot job, no healthcheck needed
+
+  # ── FastAPI application server ─────────────────────────────────────────────
+  api:
+    build: .
+    image: cinematch:latest
+    container_name: cinematch_api
+    restart: unless-stopped
+    depends_on:
+      ingest:
+        condition: service_completed_successfully   # wait for ingestion to finish
+    env_file: .env
+    environment:
+      - CHROMA_PERSIST_DIR=/app/.chromadb
+      - MOVIES_CSV=/app/data/tmdb_5000_movies.csv
+      - CREDITS_CSV=/app/data/tmdb_5000_credits.csv
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/app/.chromadb          # same volume as ingest
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  chroma_data:
+    driver: local

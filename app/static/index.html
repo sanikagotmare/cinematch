@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CineMatch — Find Your Movie</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #e50914;
+    --red2: #b81d24;
+    --bg: #141414;
+    --surface: #1f1f1f;
+    --surface2: #2a2a2a;
+    --border: rgba(255,255,255,0.08);
+    --text: #e5e5e5;
+    --muted: #777;
+    --gold: #f5c518;
+    --radius: 6px;
+  }
+
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; height: 68px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, transparent 100%);
+    transition: background 0.3s;
+  }
+  nav.scrolled { background: rgba(20,20,20,0.98); }
+  .logo { font-size: 26px; font-weight: 900; color: var(--red); letter-spacing: -1px; cursor: pointer; }
+  .nav-right { display: flex; align-items: center; gap: 16px; }
+  .search-wrap { position: relative; }
+  .search-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: var(--radius); padding: 8px 14px;
+    transition: all 0.2s; width: 280px;
+  }
+  .search-bar:focus-within { border-color: #fff; background: rgba(0,0,0,0.8); }
+  .search-bar input { background: none; border: none; outline: none; color: #fff; font-size: 14px; width: 100%; }
+  .search-bar input::placeholder { color: var(--muted); }
+  .search-drop {
+    position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+    background: #181818; border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    display: none; z-index: 200; max-height: 400px; overflow-y: auto;
+  }
+  .search-drop.open { display: block; }
+  .search-drop-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .search-drop-item:hover { background: var(--surface2); }
+  .search-drop-item:last-child { border-bottom: none; }
+  .sdrop-thumb { width: 40px; height: 56px; border-radius: 4px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
+  .sdrop-info strong { font-size: 13px; display: block; margin-bottom: 2px; }
+  .sdrop-info small { font-size: 11px; color: var(--muted); }
+
+  /* ── HERO ── */
+  .hero {
+    height: 85vh; min-height: 500px;
+    background: linear-gradient(to right, rgba(0,0,0,0.8) 40%, transparent),
+                linear-gradient(to top, #141414 0%, transparent 30%),
+                radial-gradient(ellipse at 30% 50%, rgba(229,9,20,0.15), transparent 60%),
+                #1a1a1a;
+    display: flex; align-items: center; padding: 0 48px;
+    position: relative; overflow: hidden;
+  }
+  .hero-content { max-width: 560px; position: relative; z-index: 1; }
+  .hero-badge { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--red); margin-bottom: 12px; font-weight: 600; }
+  .hero-title { font-size: clamp(32px, 5vw, 56px); font-weight: 800; line-height: 1.05; margin-bottom: 12px; }
+  .hero-sub { font-size: 15px; color: #aaa; line-height: 1.65; margin-bottom: 28px; max-width: 440px; }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    padding: 12px 28px; background: var(--red); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 15px;
+    font-weight: 600; cursor: pointer; transition: background 0.2s;
+  }
+  .btn-primary:hover { background: var(--red2); }
+  .btn-outline {
+    padding: 12px 28px; background: rgba(255,255,255,0.15); color: #fff;
+    border: 1px solid rgba(255,255,255,0.3); border-radius: var(--radius);
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-outline:hover { background: rgba(255,255,255,0.25); }
+
+  /* ── MOOD BAR ── */
+  .mood-bar { padding: 28px 48px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .mood-bar h2 { font-size: 13px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
+  .mood-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+  .mood-pill {
+    padding: 8px 20px; border-radius: 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: #ccc; cursor: pointer; font-size: 13px;
+    transition: all 0.18s; user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mood-pill:hover { border-color: rgba(255,255,255,0.2); color: #fff; transform: translateY(-1px); }
+  .mood-pill.active { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+
+  /* ── MAIN CONTENT ── */
+  main { padding: 32px 48px 60px; }
+
+  /* ── SECTION ROW ── */
+  .section { margin-bottom: 48px; }
+  .section-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .section-title { font-size: 20px; font-weight: 700; }
+  .section-sub { font-size: 12px; color: var(--muted); }
+  .section-count { font-size: 12px; color: var(--red); font-weight: 600; }
+
+  /* ── GENRE PILLS ── */
+  .genre-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .genre-pill {
+    padding: 5px 14px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .genre-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+  .genre-pill.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+  /* ── CARDS GRID ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface); border-radius: var(--radius);
+    overflow: hidden; cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+  }
+  .card:hover { transform: scale(1.04); box-shadow: 0 12px 40px rgba(0,0,0,0.7); z-index: 2; }
+  .card-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: var(--surface2); }
+  .card-poster-fallback {
+    width: 100%; aspect-ratio: 2/3; background: linear-gradient(135deg, var(--surface2), #111);
+    display: flex; align-items: center; justify-content: center; font-size: 40px;
+  }
+  .card-body { padding: 10px 12px 12px; }
+  .card-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+  .card-meta { display: flex; justify-content: space-between; align-items: center; }
+  .card-year { font-size: 11px; color: var(--muted); }
+  .card-rating { font-size: 11px; color: var(--gold); font-weight: 700; }
+  .card-genres { font-size: 10px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-sim { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.85); color: var(--red); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+
+  /* ── LOADER ── */
+  .loader { display: none; padding: 60px; text-align: center; }
+  .loader.show { display: block; }
+  .spinner { display: inline-block; width: 40px; height: 40px; border: 3px solid var(--surface2); border-top-color: var(--red); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader p { color: var(--muted); font-size: 14px; margin-top: 14px; }
+
+  /* ── EMPTY ── */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
+  .empty.show { display: block; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* ── MODAL ── */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85); z-index: 500;
+    align-items: flex-start; justify-content: center;
+    padding: 40px 20px; overflow-y: auto;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: #181818; border-radius: 10px; overflow: hidden;
+    width: 100%; max-width: 860px; position: relative;
+    animation: modalIn 0.22s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(24px); } }
+  .modal-hero { position: relative; }
+  .modal-backdrop { width: 100%; height: 340px; object-fit: cover; display: block; background: var(--surface2); }
+  .modal-backdrop-fallback { width: 100%; height: 200px; background: linear-gradient(135deg, #1a1a1a, #111); display: flex; align-items: center; justify-content: center; font-size: 64px; }
+  .modal-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 180px; background: linear-gradient(transparent, #181818); }
+  .modal-close {
+    position: absolute; top: 14px; right: 14px;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s; z-index: 10;
+  }
+  .modal-close:hover { background: rgba(0,0,0,0.9); }
+  .modal-body { padding: 0 32px 32px; }
+  .modal-tagline { font-size: 13px; color: var(--red); font-style: italic; margin-bottom: 8px; }
+  .modal-title { font-size: 32px; font-weight: 800; margin-bottom: 10px; line-height: 1.1; }
+  .modal-meta { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .modal-rating { color: var(--gold); font-weight: 700; font-size: 14px; }
+  .modal-overview { font-size: 14px; line-height: 1.75; color: #ccc; margin-bottom: 18px; }
+  .modal-details { display: flex; gap: 32px; margin-bottom: 20px; flex-wrap: wrap; }
+  .modal-detail-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+  .modal-detail-val { font-size: 13px; color: #e5e5e5; }
+  .genre-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  .genre-tag { padding: 4px 12px; border-radius: 20px; font-size: 11px; background: var(--surface2); border: 1px solid var(--border); color: #aaa; }
+
+  /* Streaming providers */
+  .providers { margin-bottom: 24px; }
+  .providers-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .provider-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .provider-chip { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--surface2); border: 1px solid var(--border); color: #e5e5e5; }
+
+  /* Similar */
+  .similar-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #aaa; }
+  .similar-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+  .similar-scroll::-webkit-scrollbar { height: 3px; }
+  .sim-card { flex: 0 0 100px; cursor: pointer; }
+  .sim-card img { width: 100px; height: 150px; border-radius: var(--radius); object-fit: cover; background: var(--surface2); display: block; transition: opacity 0.15s; }
+  .sim-card img:hover { opacity: 0.75; }
+  .sim-card p { font-size: 10px; color: var(--muted); text-align: center; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── SEARCH RESULTS ── */
+  .search-section { margin-bottom: 48px; }
+
+  /* ── ERROR TOAST ── */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: #fff; padding: 12px 20px; border-radius: var(--radius); font-size: 13px; z-index: 999; display: none; border-left: 3px solid var(--red); }
+  .toast.show { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } }
+.watch-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; background: var(--red); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 12px;
+    font-weight: 600; cursor: pointer; text-decoration: none;
+    transition: background 0.2s;
+  }
+  .watch-btn:hover { background: var(--red2); }
+  @media (max-width: 640px) {
+    nav { padding: 0 16px; }
+    .hero { padding: 0 16px; }
+    .mood-bar { padding: 20px 16px; }
+    main { padding: 24px 16px 48px; }
+    .modal-body { padding: 0 16px 24px; }
+    .search-bar { width: 200px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="navbar">
+  <div class="logo" onclick="scrollTo(0,0)">CINEMATCH</div>
+  <div class="nav-right">
+    <div class="search-wrap">
+      <div class="search-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="searchInput" placeholder="Search movies…" autocomplete="off"/>
+      </div>
+      <div class="search-drop" id="searchDrop"></div>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">AI-powered · 4,142 movies</div>
+    <h1 class="hero-title">Your perfect movie is one click away</h1>
+    <p class="hero-sub">Semantic search powered by dense vector embeddings. Find movies by vibe, not just keywords — "space horror survival" finds Alien, not just movies with those words in the title.</p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="document.getElementById('searchInput').focus()">🔍 Search a movie</button>
+      <button class="btn-outline" onclick="selectMood('excited', document.querySelector('[data-mood=excited]'))">🎲 Surprise me</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOOD BAR -->
+<div class="mood-bar">
+  <h2>Pick your mood</h2>
+  <div class="mood-pills">
+    <button class="mood-pill" data-mood="happy"       onclick="selectMood('happy',this)">😄 Happy</button>
+    <button class="mood-pill" data-mood="excited"     onclick="selectMood('excited',this)">🤩 Excited</button>
+    <button class="mood-pill" data-mood="sad"         onclick="selectMood('sad',this)">😢 Sad</button>
+    <button class="mood-pill" data-mood="scared"      onclick="selectMood('scared',this)">😱 Scared</button>
+    <button class="mood-pill" data-mood="romantic"    onclick="selectMood('romantic',this)">❤️ Romantic</button>
+    <button class="mood-pill" data-mood="inspired"    onclick="selectMood('inspired',this)">💡 Inspired</button>
+    <button class="mood-pill" data-mood="adventurous" onclick="selectMood('adventurous',this)">🧭 Adventurous</button>
+    <button class="mood-pill" data-mood="relaxed"     onclick="selectMood('relaxed',this)">😌 Relaxed</button>
+    <button class="mood-pill" data-mood="thoughtful"  onclick="selectMood('thoughtful',this)">🤔 Thoughtful</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main>
+  <!-- Search Results Section -->
+  <div class="section search-section" id="searchSection" style="display:none">
+    <div class="section-header">
+      <div class="section-title">Search results for "<span id="searchQuery"></span>"</div>
+      <button onclick="clearSearch()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">✕ Clear</button>
+    </div>
+    <div class="loader" id="searchLoader"><div class="spinner"></div><p>Searching semantically…</p></div>
+    <div class="empty" id="searchEmpty"><div class="empty-icon">🔍</div><p>No results found. Try different keywords.</p></div>
+    <div class="cards-grid" id="searchCards"></div>
+  </div>
+
+  <!-- Mood Results Section -->
+  <div class="section" id="moodSection" style="display:none">
+    <div class="section-header">
+      <div class="section-title" id="moodTitle">Movies for your mood</div>
+      <div class="section-count" id="moodCount"></div>
+    </div>
+    <div class="genre-pills" id="genrePills"></div>
+    <div class="loader" id="moodLoader"><div class="spinner"></div><p>Finding the best matches…</p></div>
+    <div class="empty" id="moodEmpty"><div class="empty-icon">🎬</div><p>No movies found. Try a different genre filter.</p></div>
+    <div class="cards-grid" id="moodCards"></div>
+  </div>
+
+  <!-- Similar Movies Section -->
+  <div class="section" id="similarSection" style="display:none">
+    <div class="section-header">
+      <div class="section-title">Because you liked <span id="similarTitle" style="color:var(--red)"></span></div>
+      <div class="section-sub">Similar movies</div>
+    </div>
+    <div class="loader" id="similarLoader"><div class="spinner"></div><p>Finding similar movies…</p></div>
+    <div class="cards-grid" id="similarCards"></div>
+  </div>
+
+  <!-- Default: prompt -->
+  <div id="defaultMsg" style="text-align:center;padding:80px 20px;color:var(--muted)">
+    <div style="font-size:56px;margin-bottom:16px">🎬</div>
+    <div style="font-size:18px;font-weight:600;color:#555;margin-bottom:8px">Pick a mood or search for a movie</div>
+    <div style="font-size:14px">Your personalised recommendations will appear here</div>
+  </div>
+</main>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-hero">
+      <img class="modal-backdrop" id="modalBackdrop" src="" alt=""
+           onerror="this.style.display='none';document.getElementById('modalBackdropFallback').style.display='flex'"/>
+      <div class="modal-backdrop-fallback" id="modalBackdropFallback" style="display:none">🎬</div>
+      <div class="modal-fade"></div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-tagline" id="modalTagline"></div>
+      <div class="modal-title"   id="modalTitle"></div>
+      <div class="modal-meta"    id="modalMeta"></div>
+      <div class="modal-overview" id="modalOverview"></div>
+      <div class="modal-details" id="modalDetails"></div>
+      <div class="genre-tags"    id="modalGenres"></div>
+      <div class="providers"     id="modalProviders"></div>
+      <div class="similar-title">More like this</div>
+      <div class="similar-scroll" id="modalSimilar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+
+<script>
+const API = '';  // same origin — FastAPI serves this HTML
+
+const GENRES = ['Action','Adventure','Animation','Comedy','Crime','Documentary',
+  'Drama','Family','Fantasy','History','Horror','Music','Mystery',
+  'Romance','Science Fiction','Thriller','War','Western'];
+
+let activeMood = null;
+let activeGenre = null;
+let searchTimer = null;
+
+// ── Nav scroll effect ────────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', scrollY > 60);
+});
+
+// ── Genre pills ──────────────────────────────────────────────────────────────
+function buildGenrePills() {
+  const c = document.getElementById('genrePills');
+  c.innerHTML = '';
+  const all = document.createElement('button');
+  all.className = 'genre-pill active'; all.textContent = 'All genres';
+  all.onclick = () => { activeGenre = null; setActiveGenrePill(all); loadMood(); };
+  c.appendChild(all);
+  GENRES.forEach(g => {
+    const btn = document.createElement('button');
+    btn.className = 'genre-pill'; btn.textContent = g;
+    btn.onclick = () => { activeGenre = g; setActiveGenrePill(btn); loadMood(); };
+    c.appendChild(btn);
+  });
+}
+function setActiveGenrePill(el) {
+  document.querySelectorAll('.genre-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+buildGenrePills();
+
+// ── Mood selection ────────────────────────────────────────────────────────────
+function selectMood(mood, btn) {
+  document.querySelectorAll('.mood-pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  activeMood = mood;
+  activeGenre = null;
+  setActiveGenrePill(document.querySelector('.genre-pill'));
+  clearSearch();
+  document.getElementById('defaultMsg').style.display = 'none';
+  document.getElementById('moodSection').style.display = 'block';
+  document.getElementById('similarSection').style.display = 'none';
+  const moodLabels = {
+    happy:'😄 Happy vibes', excited:'🤩 Excited picks', sad:'😢 Sad & emotional',
+    scared:'😱 Horror & suspense', romantic:'❤️ Romantic films',
+    inspired:'💡 Inspiring stories', adventurous:'🧭 Adventures await',
+    relaxed:'😌 Easy watching', thoughtful:'🤔 Thought-provoking'
+  };
+  document.getElementById('moodTitle').textContent = moodLabels[mood] || mood;
+  loadMood();
+}
+
+async function loadMood() {
+  const loader = document.getElementById('moodLoader');
+  const empty  = document.getElementById('moodEmpty');
+  const cards  = document.getElementById('moodCards');
+  const count  = document.getElementById('moodCount');
+  loader.classList.add('show'); empty.classList.remove('show'); cards.innerHTML = '';
+
+  try {
+    let url = `${API}/api/v1/mood?mood=${activeMood}&top_k=24`;
+    if (activeGenre) url += `&genre=${encodeURIComponent(activeGenre)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    loader.classList.remove('show');
+    if (!data.length) { empty.classList.add('show'); return; }
+    count.textContent = `${data.length} movies`;
+    renderCards(data, cards, true);
+  } catch (e) {
+    loader.classList.remove('show');
+    showToast('Could not load movies. Is the API running?');
+  }
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (!q) { closeDrop(); return; }
+  searchTimer = setTimeout(() => doDropSearch(q), 320);
+});
+
+async function doDropSearch(q) {
+  try {
+    const res  = await fetch(`${API}/api/v1/search?q=${encodeURIComponent(q)}&top_k=6`);
+    const data = await res.json();
+    const drop = document.getElementById('searchDrop');
+    drop.innerHTML = '';
+    if (!data.results || !data.results.length) { closeDrop(); return; }
+    data.results.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'search-drop-item';
+      const poster = m.poster_url || '';
+      div.innerHTML = `
+        <img class="sdrop-thumb" src="${poster}" alt="" onerror="this.style.display='none'"/>
+        <div class="sdrop-info">
+          <strong>${esc(m.title)}</strong>
+          <small>${m.release_year} · ⭐ ${m.vote_average}</small>
+        </div>`;
+      div.onclick = () => { closeDrop(); showSearchResults(q); };
+      drop.appendChild(div);
+    });
+    drop.classList.add('open');
+  } catch(e) {}
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const q = e.target.value.trim();
+    if (q) { closeDrop(); showSearchResults(q); }
+  }
+});
+
+async function showSearchResults(q) {
+  document.getElementById('defaultMsg').style.display = 'none';
+  document.getElementById('moodSection').style.display = 'none';
+  document.getElementById('similarSection').style.display = 'none';
+  document.getElementById('searchSection').style.display = 'block';
+  document.getElementById('searchQuery').textContent = q;
+  document.getElementById('searchInput').value = q;
+
+  const loader = document.getElementById('searchLoader');
+  const empty  = document.getElementById('searchEmpty');
+  const cards  = document.getElementById('searchCards');
+  loader.classList.add('show'); empty.classList.remove('show'); cards.innerHTML = '';
+
+  try {
+    const res  = await fetch(`${API}/api/v1/search?q=${encodeURIComponent(q)}&top_k=20`);
+    const data = await res.json();
+    loader.classList.remove('show');
+    if (!data.results || !data.results.length) { empty.classList.add('show'); return; }
+    renderCards(data.results.map(r => ({...r, similarity_score: r.relevance_score})), cards, true);
+  } catch(e) {
+    loader.classList.remove('show');
+    showToast('Search failed. Is the API running?');
+  }
+}
+
+function clearSearch() {
+  document.getElementById('searchSection').style.display = 'none';
+  document.getElementById('searchInput').value = '';
+  closeDrop();
+}
+
+function closeDrop() { document.getElementById('searchDrop').classList.remove('open'); }
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) closeDrop(); });
+
+// ── Render cards ──────────────────────────────────────────────────────────────
+function renderCards(movies, container, showSim = false) {
+  container.innerHTML = '';
+  movies.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const poster = m.poster_url || '';
+    const sim    = showSim && m.similarity_score ? `<div class="card-sim">${Math.round(m.similarity_score * 100)}%</div>` : '';
+    card.innerHTML = `
+      ${sim}
+      ${poster
+        ? `<img class="card-poster" src="${poster}" alt="${esc(m.title)}" loading="lazy"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        : ''}
+      <div class="card-poster-fallback" ${poster ? 'style="display:none"' : ''}>🎬</div>
+      <div class="card-body">
+        <div class="card-title">${esc(m.title)}</div>
+        <div class="card-meta">
+          <span class="card-year">${m.release_year || ''}</span>
+          <span class="card-rating">⭐ ${m.vote_average}</span>
+        </div>
+        <div class="card-genres">${(m.genres||[]).slice(0,2).join(' · ')}</div>
+      </div>`;
+    card.onclick = () => openModal(m);
+    container.appendChild(card);
+  });
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+async function openModal(m) {
+  const bd = document.getElementById('modalBackdrop');
+  const bf = document.getElementById('modalBackdropFallback');
+  if (m.poster_url) { bd.src = m.poster_url; bd.style.display = 'block'; bf.style.display = 'none'; }
+  else { bd.style.display = 'none'; bf.style.display = 'flex'; }
+
+  document.getElementById('modalTagline').textContent = '';
+  document.getElementById('modalTitle').textContent   = m.title;
+  document.getElementById('modalOverview').textContent = m.overview || 'No description available.';
+
+  document.getElementById('modalMeta').innerHTML = `
+    <span class="modal-rating">⭐ ${m.vote_average}</span>
+    <span>${m.release_year || ''}</span>
+    ${m.vote_count ? `<span>${Number(m.vote_count).toLocaleString()} votes</span>` : ''}
+    ${m.similarity_score ? `<span style="color:var(--red)">${Math.round(m.similarity_score*100)}% match</span>` : ''}`;
+
+  document.getElementById('modalDetails').innerHTML = `
+    ${m.director ? `<div><div class="modal-detail-label">Director</div><div class="modal-detail-val">${esc(m.director)}</div></div>` : ''}
+    ${m.cast ? `<div><div class="modal-detail-label">Cast</div><div class="modal-detail-val">${esc(Array.isArray(m.cast) ? m.cast.join(', ') : m.cast)}</div></div>` : ''}
+    ${m.runtime ? `<div><div class="modal-detail-label">Runtime</div><div class="modal-detail-val">${m.runtime} min</div></div>` : ''}`;
+
+  document.getElementById('modalGenres').innerHTML =
+    (m.genres||[]).map(g => `<span class="genre-tag">${g}</span>`).join('');
+
+  // Streaming providers
+  // Where to Watch
+  const provEl = document.getElementById('modalProviders');
+  provEl.innerHTML = '<div class="providers-label">Where to Watch</div><div id="providerChips"><span style="color:var(--muted);font-size:13px">Checking availability...</span></div>';
+  
+  fetchWatchProviders(m.movie_id, m.title).then(providers => {
+    const chips = document.getElementById('providerChips');
+    if (!chips) return;
+    if (providers && providers.length) {
+      chips.innerHTML = `<div class="provider-chips">${providers.map(p => `
+        <span class="provider-chip">
+          <img src="${p.logo}" width="20" height="20" style="border-radius:4px" onerror="this.style.display='none'"/>
+          ${p.name}
+        </span>`).join('')}</div>`;
+    } else {
+      const q = encodeURIComponent(m.title);
+      const id = m.movie_id;
+      chips.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <a href="https://www.justwatch.com/in/search?q=${q}" target="_blank" class="watch-btn">🍿 JustWatch India</a>
+          <a href="https://www.themoviedb.org/movie/${id}/watch" target="_blank" class="watch-btn" style="background:var(--surface2);border:1px solid var(--border)">🎬 TMDB</a>
+          <a href="https://www.google.com/search?q=watch+${q}+online+india" target="_blank" class="watch-btn" style="background:var(--surface2);border:1px solid var(--border)">🔍 Google</a>
+        </div>`;
+    }
+  });
+
+  document.getElementById('modalSimilar').innerHTML = '<span style="color:var(--muted);font-size:13px">Loading…</span>';
+  document.getElementById('overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Load similar movies
+  try {
+    const res  = await fetch(`${API}/api/v1/recommend/${encodeURIComponent(m.title)}?top_k=8`);
+    const data = await res.json();
+    const sc   = document.getElementById('modalSimilar');
+    sc.innerHTML = '';
+    const items = data.recommendations || [];
+    if (!items.length) { sc.innerHTML = '<span style="color:var(--muted);font-size:12px">None found</span>'; return; }
+    items.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'sim-card';
+      div.innerHTML = `
+        <img src="${s.poster_url||''}" alt="${esc(s.title)}" onerror="this.style.opacity='0'"/>
+        <p>${esc(s.title)}</p>`;
+      div.onclick = () => openModal({...s, genres: s.genres || []});
+      sc.appendChild(div);
+    });
+  } catch(e) {
+    document.getElementById('modalSimilar').innerHTML = '<span style="color:var(--muted);font-size:12px">Could not load</span>';
+  }
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+async function fetchWatchProviders(movieId, title) {
+  try {
+    const res = await fetch(`/api/v1/watch/${movieId}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch(e) {
+    return [];
+  }
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

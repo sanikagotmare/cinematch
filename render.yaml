@@ -1,0 +1,54 @@
+# render.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Deploy CineMatch to Render.com (free tier)
+#
+# Setup steps:
+#   1. Push this repo to GitHub
+#   2. Go to https://render.com → New → Blueprint
+#   3. Connect your GitHub repo
+#   4. Render reads this file and creates the service automatically
+#   5. Set TMDB_API_KEY in the Render dashboard → Environment tab
+#
+# Notes:
+#   - Free tier spins down after 15 min of inactivity (cold start ~30s)
+#   - Disk is ephemeral on free tier; ChromaDB re-ingests on each deploy
+#   - Upgrade to Starter ($7/mo) to get a persistent disk
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: cinematch-api
+    runtime: python
+    region: singapore           # closest to India; change to oregon/frankfurt as needed
+    plan: free
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python scripts/ingest.py
+
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: APP_NAME
+        value: "CineMatch API"
+      - key: DEBUG
+        value: "false"
+      - key: CHROMA_PERSIST_DIR
+        value: ".chromadb"
+      - key: MOVIES_CSV
+        value: "data/tmdb_5000_movies.csv"
+      - key: CREDITS_CSV
+        value: "data/tmdb_5000_credits.csv"
+      - key: CACHE_TTL_SECONDS
+        value: "3600"
+      - key: TMDB_REGION
+        value: "IN"
+      - key: TMDB_API_KEY
+        sync: false             # set manually in Render dashboard — never commit secrets
+
+    healthCheckPath: /health
+
+    autoDeploy: true            # redeploys on every push to main

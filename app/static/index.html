@@ -140,7 +140,8 @@
     position: relative;
   }
   .card:hover { transform: scale(1.04); box-shadow: 0 12px 40px rgba(0,0,0,0.7); z-index: 2; }
-  .card-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: var(--surface2); }
+  .card-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: var(--surface2); position: absolute; top: 0; left: 0; height: 100%; }
+  .card-poster-wrap { position: relative; width: 100%; aspect-ratio: 2/3; overflow: hidden; background: var(--surface2); }
   .card-poster-fallback {
     width: 100%; aspect-ratio: 2/3; background: linear-gradient(135deg, var(--surface2), #111);
     display: flex; align-items: center; justify-content: center; font-size: 40px;
@@ -226,14 +227,18 @@
   .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: #fff; padding: 12px 20px; border-radius: var(--radius); font-size: 13px; z-index: 999; display: none; border-left: 3px solid var(--red); }
   .toast.show { display: block; animation: fadeIn 0.3s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } }
-.watch-btn {
+
+  .watch-btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 16px; background: var(--red); color: #fff;
     border: none; border-radius: var(--radius); font-size: 12px;
     font-weight: 600; cursor: pointer; text-decoration: none;
-    transition: background 0.2s;
+    transition: background 0.2s; margin-right: 4px; margin-top: 4px;
   }
   .watch-btn:hover { background: var(--red2); }
+  .watch-btn.outline { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .watch-btn.outline:hover { background: var(--surface); }
+
   @media (max-width: 640px) {
     nav { padding: 0 16px; }
     .hero { padding: 0 16px; }
@@ -268,7 +273,7 @@
     <p class="hero-sub">Semantic search powered by dense vector embeddings. Find movies by vibe, not just keywords — "space horror survival" finds Alien, not just movies with those words in the title.</p>
     <div class="hero-actions">
       <button class="btn-primary" onclick="document.getElementById('searchInput').focus()">🔍 Search a movie</button>
-      <button class="btn-outline" onclick="selectMood('excited', document.querySelector('[data-mood=excited]'))">🎲 Surprise me</button>
+   <button class="btn-outline" onclick="surpriseMe()">🎲 Surprise me</button>
     </div>
   </div>
 </div>
@@ -359,7 +364,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-
 <script>
 const API = '';  // same origin — FastAPI serves this HTML
 
@@ -396,6 +400,21 @@ function setActiveGenrePill(el) {
   el.classList.add('active');
 }
 buildGenrePills();
+async function surpriseMe() {
+  const moods = ['happy','excited','sad','scared','romantic','inspired','adventurous','relaxed','thoughtful'];
+  const random = moods[Math.floor(Math.random() * moods.length)];
+  showToast('🎲 Finding you a surprise...');
+  try {
+    const res  = await fetch(`${API}/api/v1/mood?mood=${random}&top_k=24`);
+    const data = await res.json();
+    if (data && data.length) {
+      const movie = data[Math.floor(Math.random() * data.length)];
+      openModal(movie);
+    }
+  } catch(e) {
+    showToast('Could not load a surprise movie!');
+  }
+}
 
 // ── Mood selection ────────────────────────────────────────────────────────────
 function selectMood(mood, btn) {
@@ -513,6 +532,50 @@ function clearSearch() {
 function closeDrop() { document.getElementById('searchDrop').classList.remove('open'); }
 document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) closeDrop(); });
 
+// ── Poster queue — fetches missing posters from TMDB with rate limiting ───────
+const TMDB_KEY = '44d567ea5d56651124612c04dcb1fbda';
+const posterQueue = [];
+let posterLoading = false;
+
+async function processQueue() {
+  if (posterLoading || posterQueue.length === 0) return;
+  posterLoading = true;
+  const { movieId, img } = posterQueue.shift();
+  try {
+    // ✅ Skip if element is gone OR if it's inside the modal
+    if (!img.isConnected || img.closest('#overlay')) {
+      posterLoading = false;
+      setTimeout(processQueue, 50);
+      return;
+    }
+    const res = await fetch(
+      `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_KEY}`
+    );
+    const data = await res.json();
+    // ✅ Re-check after async fetch
+    if (data.poster_path && img.isConnected && !img.closest('#overlay')) {
+      img.src = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+      img.style.display = 'block';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '0';
+      img.style.position = 'absolute';
+      img.style.top = '0';
+      img.style.left = '0';
+      const next = img.nextElementSibling;
+      if (next && next.tagName === 'DIV') next.style.display = 'none';
+    }
+  } catch(e) {}
+  posterLoading = false;
+  setTimeout(processQueue, 260);
+}
+function queuePoster(movieId, imgElement) {
+  if (!movieId || !imgElement) return;
+  posterQueue.push({ movieId, img: imgElement });
+  processQueue();
+}
+
 // ── Render cards ──────────────────────────────────────────────────────────────
 function renderCards(movies, container, showSim = false) {
   container.innerHTML = '';
@@ -523,11 +586,12 @@ function renderCards(movies, container, showSim = false) {
     const sim    = showSim && m.similarity_score ? `<div class="card-sim">${Math.round(m.similarity_score * 100)}%</div>` : '';
     card.innerHTML = `
       ${sim}
-      ${poster
-        ? `<img class="card-poster" src="${poster}" alt="${esc(m.title)}" loading="lazy"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
-        : ''}
-      <div class="card-poster-fallback" ${poster ? 'style="display:none"' : ''}>🎬</div>
+     <div class="card-poster-wrap">
+        <img class="card-poster" src="${poster}" alt="${esc(m.title)}" loading="lazy"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+             ${!poster ? 'style="display:none"' : ''}>
+        <div class="card-poster-fallback" ${poster ? 'style="display:none"' : ''}>🎬</div>
+      </div>
       <div class="card-body">
         <div class="card-title">${esc(m.title)}</div>
         <div class="card-meta">
@@ -538,6 +602,11 @@ function renderCards(movies, container, showSim = false) {
       </div>`;
     card.onclick = () => openModal(m);
     container.appendChild(card);
+    // Queue poster fetch if missing
+    if (!poster && m.movie_id) {
+      const img = card.querySelector('.card-poster');
+      if (img) queuePoster(m.movie_id, img);
+    }
   });
 }
 
@@ -546,7 +615,20 @@ async function openModal(m) {
   const bd = document.getElementById('modalBackdrop');
   const bf = document.getElementById('modalBackdropFallback');
   if (m.poster_url) { bd.src = m.poster_url; bd.style.display = 'block'; bf.style.display = 'none'; }
-  else { bd.style.display = 'none'; bf.style.display = 'flex'; }
+  else {
+    bd.style.display = 'none'; bf.style.display = 'flex';
+    // Try fetching poster for modal too
+    if (m.movie_id) {
+      fetch(`https://api.themoviedb.org/3/movie/${m.movie_id}?api_key=${TMDB_KEY}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.poster_path) {
+            bd.src = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+            bd.style.display = 'block'; bf.style.display = 'none';
+          }
+        }).catch(()=>{});
+    }
+  }
 
   document.getElementById('modalTagline').textContent = '';
   document.getElementById('modalTitle').textContent   = m.title;
@@ -566,31 +648,64 @@ async function openModal(m) {
   document.getElementById('modalGenres').innerHTML =
     (m.genres||[]).map(g => `<span class="genre-tag">${g}</span>`).join('');
 
-  // Streaming providers
   // Where to Watch
   const provEl = document.getElementById('modalProviders');
   provEl.innerHTML = '<div class="providers-label">Where to Watch</div><div id="providerChips"><span style="color:var(--muted);font-size:13px">Checking availability...</span></div>';
+fetchWatchProviders(m.movie_id, m.title).then(({ providers, link }) => {
+  const chips = document.getElementById('providerChips');
+  if (!chips) return;
+
+  const q  = encodeURIComponent(m.title);
+  const id = m.movie_id;
+
+  const fallbackHtml = `
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <a href="https://www.justwatch.com/in/search?q=${q}" target="_blank" class="watch-btn">🍿 JustWatch India</a>
+      <a href="https://www.themoviedb.org/movie/${id}/watch" target="_blank" class="watch-btn outline">🎬 TMDB</a>
+      <a href="https://www.google.com/search?q=watch+${q}+online+india" target="_blank" class="watch-btn outline">🔍 Google</a>
+    </div>`;
+
+  const providerLinks = {
+    'Netflix':              `https://www.netflix.com/search?q=${q}`,
+    'Amazon Prime Video':   `https://www.amazon.in/s?k=${q}&i=instant-video`,
+    'Prime Video':          `https://www.amazon.in/s?k=${q}&i=instant-video`,
+    'Disney+ Hotstar':      `https://www.hotstar.com/in/search?q=${q}`,
+    'Hotstar':              `https://www.hotstar.com/in/search?q=${q}`,
+    'Apple TV+':            `https://tv.apple.com/search?term=${q}`,
+    'Apple TV':             `https://tv.apple.com/search?term=${q}`,
+    'JioCinema':            `https://www.jiocinema.com/search/${q}`,
+    'Zee5':                 `https://www.zee5.com/search?q=${q}`,
+    'SonyLIV':              `https://www.sonyliv.com/search/${q}`,
+    'Mubi':                 `https://mubi.com/en/in/search?q=${q}`,
+    'YouTube':              `https://www.youtube.com/results?search_query=${q}`,
+  };
+
+  if (providers && providers.length) {
+    chips.innerHTML = `
+      <div class="provider-chips">
+        ${providers.map(p => {
+          const url = providerLinks[p.provider_name] || link || `https://www.justwatch.com/in/search?q=${q}`;
+          return `
+            <a href="${url}" target="_blank" rel="noopener" class="provider-chip"
+               style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+              <img src="https://image.tmdb.org/t/p/w45${p.logo_path}"
+                   width="20" height="20"
+                   style="border-radius:4px;vertical-align:middle"
+                   onerror="this.style.display='none'"/>
+              ${esc(p.provider_name)}
+            </a>`;
+        }).join('')}
+      </div>
+      ${fallbackHtml}`;
+  } else {
+    chips.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        Not found on major platforms — check these:
+      </div>
+      ${fallbackHtml}`;
+  }
+});
   
-  fetchWatchProviders(m.movie_id, m.title).then(providers => {
-    const chips = document.getElementById('providerChips');
-    if (!chips) return;
-    if (providers && providers.length) {
-      chips.innerHTML = `<div class="provider-chips">${providers.map(p => `
-        <span class="provider-chip">
-          <img src="${p.logo}" width="20" height="20" style="border-radius:4px" onerror="this.style.display='none'"/>
-          ${p.name}
-        </span>`).join('')}</div>`;
-    } else {
-      const q = encodeURIComponent(m.title);
-      const id = m.movie_id;
-      chips.innerHTML = `
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-          <a href="https://www.justwatch.com/in/search?q=${q}" target="_blank" class="watch-btn">🍿 JustWatch India</a>
-          <a href="https://www.themoviedb.org/movie/${id}/watch" target="_blank" class="watch-btn" style="background:var(--surface2);border:1px solid var(--border)">🎬 TMDB</a>
-          <a href="https://www.google.com/search?q=watch+${q}+online+india" target="_blank" class="watch-btn" style="background:var(--surface2);border:1px solid var(--border)">🔍 Google</a>
-        </div>`;
-    }
-  });
 
   document.getElementById('modalSimilar').innerHTML = '<span style="color:var(--muted);font-size:13px">Loading…</span>';
   document.getElementById('overlay').classList.add('open');
@@ -608,10 +723,26 @@ async function openModal(m) {
       const div = document.createElement('div');
       div.className = 'sim-card';
       div.innerHTML = `
-        <img src="${s.poster_url||''}" alt="${esc(s.title)}" onerror="this.style.opacity='0'"/>
-        <p>${esc(s.title)}</p>`;
+  <img src="${s.poster_url||''}" alt="${esc(s.title)}" 
+       style="${!s.poster_url ? 'display:none' : ''}"
+       onerror="this.style.display='none'"/>
+  <p style="font-size:10px;color:#aaa;text-align:center;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100px">${esc(s.title)}</p>`;
       div.onclick = () => openModal({...s, genres: s.genres || []});
       sc.appendChild(div);
+     // Direct fetch for modal similar cards — don't use shared queue
+if (!s.poster_url && s.movie_id) {
+  const img = div.querySelector('img');
+  if (img) {
+    fetch(`https://api.themoviedb.org/3/movie/${s.movie_id}?api_key=${TMDB_KEY}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.poster_path && img.isConnected) {
+          img.src = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+          img.style.display = 'block';
+        }
+      }).catch(() => {});
+  }
+}
     });
   } catch(e) {
     document.getElementById('modalSimilar').innerHTML = '<span style="color:var(--muted);font-size:12px">Could not load</span>';
@@ -629,19 +760,28 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-async function fetchWatchProviders(movieId, title) {
-  try {
-    const res = await fetch(`/api/v1/watch/${movieId}`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch(e) {
-    return [];
-  }
-}
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 3500);
+}
+async function fetchWatchProviders(movieId, title) {
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/movie/${movieId}/watch/providers?api_key=${TMDB_KEY}`
+    );
+    const data = await res.json();
+    const region = data.results?.IN || data.results?.US || {};
+    const options = [
+      ...(region.flatrate || []),
+      ...(region.free || []),
+      ...(region.ads || []),
+    ];
+    const link = region.link || null;
+    return { providers: options, link };
+  } catch(e) {
+    return { providers: [], link: null };
+  }
 }
 </script>
 </body>

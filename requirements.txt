@@ -6,7 +6,7 @@ sentence-transformers==2.7.0
 torch
 numpy
 chromadb==0.5.0
-pandas==2.2.2
+pandas>=2.2.2
 httpx==0.27.0
 loguru==0.7.2
 pytest==8.2.0

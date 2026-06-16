@@ -44,13 +44,19 @@ USER cinematch
 COPY --chown=cinematch:cinematch app/       ./app/
 COPY --chown=cinematch:cinematch scripts/   ./scripts/
 COPY --chown=cinematch:cinematch tests/     ./tests/
+COPY --chown=cinematch:cinematch data/      ./data/
 
 # Environment defaults (overridden by docker-compose or cloud env vars)
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CHROMA_PERSIST_DIR=/app/.chromadb \
     MOVIES_CSV=/app/data/tmdb_5000_movies.csv \
-    CREDITS_CSV=/app/data/tmdb_5000_credits.csv
+    CREDITS_CSV=/app/data/tmdb_5000_credits.csv \
+    TF_ENABLE_ONEDNN_OPTS=0
+
+# Fetch real CSVs from Git LFS (pointer files were copied above) and ingest
+# This runs at build time so the container starts with embeddings ready.
+RUN python scripts/lfs_fetch.py && python scripts/ingest.py
 
 EXPOSE 8000
 
@@ -59,9 +65,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 # Use exec form — signals go directly to uvicorn, not a shell
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "1", \
-     "--loop", "uvloop", \
-     "--access-log"]
+# Render injects $PORT at runtime; default to 8000 for local docker-compose
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --access-log"]

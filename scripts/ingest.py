@@ -11,11 +11,16 @@ import time
 from pathlib import Path
 
 # ── Fix Python path FIRST before any other imports ────────────────────────────
-# This ensures 'app' package is always findable regardless of working directory
 ROOT = Path(__file__).parent.parent.resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-os.chdir(ROOT)  # also change working directory to project root
+os.chdir(ROOT)
+
+# Debug: print path so we can see it in Render logs
+print(f"ROOT={ROOT}", flush=True)
+print(f"sys.path={sys.path[:3]}", flush=True)
+print(f"app exists: {(ROOT / 'app').exists()}", flush=True)
+print(f"app/models exists: {(ROOT / 'app' / 'models').exists()}", flush=True)
 
 import pandas as pd
 import numpy as np

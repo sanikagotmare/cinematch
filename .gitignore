@@ -30,7 +30,7 @@ ENV/
 # ── Sentence Transformers model cache ─────────────────────────────────────────
 # The model is downloaded automatically on first run (~80 MB)
 .cache/
-models/
+/models/
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/

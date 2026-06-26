@@ -14,7 +14,7 @@
 
 CineMatch recommends movies using **dense vector embeddings** — not keyword matching or TF-IDF. Searching *"space horror survival"* returns Alien, Event Horizon, and Gravity because the system understands semantic meaning, not just shared words.
 
-**Live demo:** `https://cinematch.onrender.com` *(spins up in ~30s on free tier)*
+**Live demo:** `https://cinematch-l925.onrender.com` *(spins up in ~30s on free tier)*
 
 ---
 
@@ -73,7 +73,7 @@ CineMatch recommends movies using **dense vector embeddings** — not keyword ma
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/cinematch.git
+git clone https://github.com/sanikagotmare/cinematch.git
 cd cinematch
 
 # 2. Add your Kaggle CSVs
@@ -246,6 +246,3 @@ The data files are gitignored (too large for GitHub). The ingestion script parse
 
 MIT — see [LICENSE](LICENSE).
 
----
-
-*Built by [YOUR NAME] · [LinkedIn](https://linkedin.com/in/YOUR_PROFILE) · [Portfolio](https://yoursite.com)*
